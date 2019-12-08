@@ -35,7 +35,7 @@ import static org.apache.skywalking.apm.agent.core.plugin.match.NameMatch.byName
  * methods to ensure the correct compilation of the code.
  */
 public class WrapperInstrumentation extends ClassStaticMethodsEnhancePluginDefine {
-    @Override protected StaticMethodsInterceptPoint[] getStaticMethodsInterceptPoints() {
+    @Override public StaticMethodsInterceptPoint[] getStaticMethodsInterceptPoints() {
         return new StaticMethodsInterceptPoint[] {
             new StaticMethodsInterceptPoint() {
                 @Override public ElementMatcher<MethodDescription> getMethodsMatcher() {
@@ -43,7 +43,7 @@ public class WrapperInstrumentation extends ClassStaticMethodsEnhancePluginDefin
                 }
 
                 @Override public String getMethodsInterceptor() {
-                    return "org.apache.skywalking.apm.plugin.dubbo.patch.MakeWrapperInterceptor";
+                    return "org.apache.skywalking.apm.plugin.asf.dubbo.patch.MakeWrapperInterceptor";
                 }
 
                 @Override public boolean isOverrideArgs() {

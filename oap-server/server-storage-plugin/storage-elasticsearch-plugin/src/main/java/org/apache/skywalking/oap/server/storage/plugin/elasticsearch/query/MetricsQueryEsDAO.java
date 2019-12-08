@@ -28,8 +28,8 @@ import org.apache.skywalking.oap.server.core.storage.model.ModelName;
 import org.apache.skywalking.oap.server.core.storage.query.IMetricsQueryDAO;
 import org.apache.skywalking.oap.server.library.client.elasticsearch.ElasticSearchClient;
 import org.apache.skywalking.oap.server.storage.plugin.elasticsearch.base.EsDAO;
-import org.elasticsearch.action.get.*;
 import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.bucket.terms.*;
 import org.elasticsearch.search.aggregations.metrics.avg.Avg;
@@ -62,7 +62,7 @@ public class MetricsQueryEsDAO extends EsDAO implements IMetricsQueryDAO {
         IntValues intValues = new IntValues();
         Terms idTerms = response.getAggregations().get(Metrics.ENTITY_ID);
         for (Terms.Bucket idBucket : idTerms.getBuckets()) {
-            long value = 0;
+            long value;
             switch (function) {
                 case Sum:
                     Sum sum = idBucket.getAggregations().get(valueCName);
@@ -86,7 +86,7 @@ public class MetricsQueryEsDAO extends EsDAO implements IMetricsQueryDAO {
         return intValues;
     }
 
-    private void functionAggregation(Function function, TermsAggregationBuilder parentAggBuilder, String valueCName) {
+    protected void functionAggregation(Function function, TermsAggregationBuilder parentAggBuilder, String valueCName) {
         switch (function) {
             case Avg:
                 parentAggBuilder.subAggregation(AggregationBuilders.avg(valueCName).field(valueCName));
@@ -103,34 +103,36 @@ public class MetricsQueryEsDAO extends EsDAO implements IMetricsQueryDAO {
     @Override public IntValues getLinearIntValues(String indName, Downsampling downsampling, List<String> ids, String valueCName) throws IOException {
         String indexName = ModelName.build(downsampling, indName);
 
-        MultiGetResponse response = getClient().multiGet(indexName, ids);
+        SearchResponse response = getClient().ids(indexName, ids.toArray(new String[0]));
+        Map<String, Map<String, Object>> idMap = toMap(response);
 
         IntValues intValues = new IntValues();
-        for (MultiGetItemResponse itemResponse : response.getResponses()) {
-
+        for (String id : ids) {
             KVInt kvInt = new KVInt();
-            kvInt.setId(itemResponse.getId());
+            kvInt.setId(id);
             kvInt.setValue(0);
-            Map<String, Object> source = itemResponse.getResponse().getSource();
-            if (source != null) {
+            if (idMap.containsKey(id)) {
+                Map<String, Object> source = idMap.get(id);
                 kvInt.setValue(((Number)source.getOrDefault(valueCName, 0)).longValue());
             }
             intValues.getValues().add(kvInt);
         }
+
         return intValues;
     }
 
     @Override public Thermodynamic getThermodynamic(String indName, Downsampling downsampling, List<String> ids, String valueCName) throws IOException {
         String indexName = ModelName.build(downsampling, indName);
 
-        MultiGetResponse response = getClient().multiGet(indexName, ids);
-
         Thermodynamic thermodynamic = new Thermodynamic();
         List<List<Long>> thermodynamicValueMatrix = new ArrayList<>();
 
+        SearchResponse response = getClient().ids(indexName, ids.toArray(new String[0]));
+        Map<String, Map<String, Object>> idMap = toMap(response);
+
         int numOfSteps = 0;
-        for (MultiGetItemResponse itemResponse : response.getResponses()) {
-            Map<String, Object> source = itemResponse.getResponse().getSource();
+        for (String id : ids) {
+            Map<String, Object> source = idMap.get(id);
             if (source == null) {
                 // add empty list to represent no data exist for this time bucket
                 thermodynamicValueMatrix.add(new ArrayList<>());
@@ -140,7 +142,7 @@ public class MetricsQueryEsDAO extends EsDAO implements IMetricsQueryDAO {
                 numOfSteps = ((Number)source.get(ThermodynamicMetrics.NUM_OF_STEPS)).intValue() + 1;
 
                 String value = (String)source.get(ThermodynamicMetrics.DETAIL_GROUP);
-                IntKeyLongValueArray intKeyLongValues = new IntKeyLongValueArray(5);
+                IntKeyLongValueHashMap intKeyLongValues = new IntKeyLongValueHashMap(5);
                 intKeyLongValues.toObject(value);
 
                 List<Long> axisYValues = new ArrayList<>();
@@ -148,7 +150,7 @@ public class MetricsQueryEsDAO extends EsDAO implements IMetricsQueryDAO {
                     axisYValues.add(0L);
                 }
 
-                for (IntKeyLongValue intKeyLongValue : intKeyLongValues) {
+                for (IntKeyLongValue intKeyLongValue : intKeyLongValues.values()) {
                     axisYValues.set(intKeyLongValue.getKey(), intKeyLongValue.getValue());
                 }
 
@@ -159,5 +161,14 @@ public class MetricsQueryEsDAO extends EsDAO implements IMetricsQueryDAO {
         thermodynamic.fromMatrixData(thermodynamicValueMatrix, numOfSteps);
 
         return thermodynamic;
+    }
+
+    private Map<String, Map<String, Object>> toMap(SearchResponse response) {
+        Map<String, Map<String, Object>> result = new HashMap<>();
+        SearchHit[] hits = response.getHits().getHits();
+        for (SearchHit hit : hits) {
+            result.put(hit.getId(), hit.getSourceAsMap());
+        }
+        return result;
     }
 }

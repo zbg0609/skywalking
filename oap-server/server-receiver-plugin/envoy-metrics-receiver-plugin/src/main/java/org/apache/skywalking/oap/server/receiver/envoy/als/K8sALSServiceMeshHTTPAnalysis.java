@@ -175,7 +175,7 @@ public class K8sALSServiceMeshHTTPAnalysis implements ALSHTTPAnalysis {
                 if (request != null) {
                     endpoint = request.getPath();
                     String schema = request.getScheme();
-                    if (schema.equals("http") || schema.equals("https")) {
+                    if ("http".equals(schema) || "https".equals(schema)) {
                         protocol = Protocol.HTTP;
                     } else {
                         protocol = Protocol.gRPC;
@@ -278,7 +278,7 @@ public class K8sALSServiceMeshHTTPAnalysis implements ALSHTTPAnalysis {
                 if (request != null) {
                     endpoint = request.getPath();
                     String schema = request.getScheme();
-                    if (schema.equals("http") || schema.equals("https")) {
+                    if ("http".equals(schema) || "https".equals(schema)) {
                         protocol = Protocol.HTTP;
                     } else {
                         protocol = Protocol.gRPC;
@@ -361,7 +361,7 @@ public class K8sALSServiceMeshHTTPAnalysis implements ALSHTTPAnalysis {
         if (map.containsKey(ip)) {
             return map.get(ip);
         }
-        logger.debug("Unknown ip {}, ip -> service is {}", map);
+        logger.debug("Unknown ip {}, ip -> service is {}", ip, map);
         return ServiceMetaInfo.UNKNOWN;
     }
 
